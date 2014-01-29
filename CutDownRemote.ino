@@ -96,6 +96,7 @@ int sampleNum;
 int sampleTime;
 float cutTimerMins;
 float maxAlt;
+float maxRadius;
 float vCharged;
 boolean isCharged;
 boolean ledState;
@@ -179,6 +180,8 @@ void loop() // run over and over again
         Serial.print(cutDelayMins);
         Serial.print(",");
         Serial.print(maxAlt);
+        Serial.print(",");
+        Serial.print(maxRadius);
         Serial.flush();
         eepromAddr = 1;
         EEPROM.write( 0, eepromAddr ); //Initial eeprom address
@@ -416,52 +419,17 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
     Serial.println("The timer won't start until MODE button" );
     Serial.println("pressed and held for two LED flashes.");
     Serial.println("");
-    Serial.print("Enter maximum altitude for flight, in feet: ");
-    flashLED( ledFlashTime, 6 );
-    maxAlt = 0;
-    boolean typing = true;
-    while (typing) {
-      while (Serial.available() > 0) {
-        maxAlt = Serial.parseFloat();
-        Serial.println(maxAlt); Serial.flush();
-        if (maxAlt != 0) {
-          Serial.print("You've entered "); Serial.print(maxAlt); Serial.println(" feet as the maximum altitude for this flight."); Serial.print("Is this correct? (y/n)");
-          Serial.flush();
-          flashLED( ledFlashTime, 3 );
-          int response = 0;
-          while (response != 'y' && response != 'n') {
-            response = Serial.read();
-          }
-          Serial.println(response);
-          if (response == 'y') {
-            Serial.println("Confirmed.");
-            Serial.print(maxAlt); Serial.println(" feet."); Serial.println("");
-            Serial.flush();
-            typing = false;
-            while (Serial.available() > 0)
-              Serial.read();
-          }
-          else {
-            Serial.print("Enter maximum altitude for flight, in feet: ");
-            Serial.flush();
-            while (Serial.available() > 0)
-              Serial.read();
-            maxAlt = 0;
-          }
-        }
-        else {
-          Serial.println("Please enter a valid number.");
-          Serial.flush();
-        }
-      }
-    }
+    
+    promptUserForData(&maxAlt, "max altitude", "feet");
+    
+    promptUserForData(&maxRadius, "max radius", "miles");
      
     Serial.print("Enter timer duration in minutes: ");
     done = false;
     rcvdBytesCnt = 0;
-    boolean entering = true;
+    boolean typing = true;
     flashLED( ledFlashTime, 6 );
-    while ( entering ) {
+    while ( typing ) {
       while ( ( inputByte = Serial.read() ) < 0 ) {
         //Serial.println(".");
         delay(100);
@@ -474,7 +442,7 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
         }
       } else {
         if ( inputByte == 13 ) {
-          entering = false;
+          typing = false;
           Serial.println("");
           timeDelay = 0;
           int weight = 1;
@@ -542,6 +510,49 @@ void waitForCharge() {
     vCutCap = vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0; 
   }
   isCharged = true; 
+}
+
+void promptUserForData(float * data, String dataName, String unit)
+{
+  Serial.print("Enter " + dataName + " of flight, in " + unit + ":");
+    flashLED( ledFlashTime, 6 );
+    *data = 0;
+    boolean typing = true;
+    while (typing) {
+      while (Serial.available() > 0) {
+        *data = Serial.parseFloat();
+        Serial.println(*data); Serial.flush();
+        if (*data != 0) {
+          Serial.print("You've entered "); Serial.print(*data); Serial.println(" " + unit + " as the " + dataName + " for this flight."); Serial.print("Is this correct? (y/n)");
+          Serial.flush();
+          flashLED( ledFlashTime, 3 );
+          int response = 0;
+          while (response != 'y' && response != 'n') {
+            response = Serial.read();
+          }
+          Serial.println(response);
+          if (response == 'y') {
+            Serial.println("Confirmed.");
+            Serial.print(*data); Serial.println(" " + unit + "."); Serial.println("");
+            Serial.flush();
+            typing = false;
+            while (Serial.available() > 0)
+              Serial.read();
+          }
+          else {
+            Serial.print("Enter " + dataName + " of flight, in " + unit);
+            Serial.flush();
+            while (Serial.available() > 0)
+              Serial.read();
+            *data = 0;
+          }
+        }
+        else {
+          Serial.println("Please enter a valid number.");
+          Serial.flush();
+        }
+      }
+    }
 }
 
   
