@@ -97,6 +97,8 @@ int sampleTime;
 float cutTimerMins;
 float maxAlt;
 float maxRadius;
+double center_lat;
+double center_lon;
 float vCharged;
 boolean isCharged;
 boolean ledState;
@@ -182,6 +184,10 @@ void loop() // run over and over again
         Serial.print(maxAlt);
         Serial.print(",");
         Serial.print(maxRadius);
+        Serial.print(",");
+        Serial.print(center_lat);
+        Serial.print(",");
+        Serial.print(center_lon);
         Serial.flush();
         eepromAddr = 1;
         EEPROM.write( 0, eepromAddr ); //Initial eeprom address
@@ -423,6 +429,10 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
     promptUserForData(&maxAlt, "max altitude", "feet");
     
     promptUserForData(&maxRadius, "max radius", "miles");
+    
+    promptUserForData(&center_lat, "launch latitude", "degrees");
+    
+    promptUserForData(&center_lon, "launch longitude", "degrees");
      
     Serial.print("Enter timer duration in minutes: ");
     done = false;
@@ -523,14 +533,14 @@ void promptUserForData(float * data, String dataName, String unit)
         *data = Serial.parseFloat();
         Serial.println(*data); Serial.flush();
         if (*data != 0) {
-          Serial.print("You've entered "); Serial.print(*data); Serial.println(" " + unit + " as the " + dataName + " for this flight."); Serial.print("Is this correct? (y/n)");
+          Serial.print("You've entered "); Serial.print(*data); Serial.println(" " + unit + " as the " + dataName + " for this flight."); Serial.print("Is this correct? (y/n) ");
           Serial.flush();
           flashLED( ledFlashTime, 3 );
           int response = 0;
           while (response != 'y' && response != 'n') {
             response = Serial.read();
           }
-          Serial.println(response);
+          Serial.println((char)response);
           if (response == 'y') {
             Serial.println("Confirmed.");
             Serial.print(*data); Serial.println(" " + unit + "."); Serial.println("");
