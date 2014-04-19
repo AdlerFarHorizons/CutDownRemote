@@ -210,7 +210,6 @@ void loop() // run over and over again
         setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
         delay(100);
       }
-      //Serial.print("updateTimer:");Serial.println( temp );Serial.flush();
       setCut( temp );
       if (sampleNum >= sampleCount) {
         float temp = readTemp( vTempPin, 0 );
@@ -240,8 +239,6 @@ void loop() // run over and over again
         EEPROM.write( eepromAddr, byte( vBackupCap ) );
         EEPROM.write( 0, byte(eepromAddr) );
         Serial.println();
-        //Serial.print("Addr:");Serial.println( eepromAddr );
-        //Serial.print("Stored Addr:");Serial.println( EEPROM.read( 0 ) );
         Serial.flush();
         eepromAddr += 1;
         sampleNum = 0;
@@ -271,35 +268,11 @@ void setCutChg( boolean state ) {
 
 boolean updateTimer() {
   cutTimerMins += ( ( 1 + timeOhFactor ) * activeSleepTime / 60000.0 );
-  //Serial.print("cutTimerMins:");Serial.print(cutTimerMins);
-  //Serial.print(" ");Serial.println(int(cutTimerMins + 0.5));Serial.flush();
   return( int(cutTimerMins) == cutDelayMins );
 }
 
 boolean cutdownReceived() {
   boolean isReceived = false;
-  /*
-  int incomingByte = 65;
-  //Serial.println("Before");
-  //Serial.flush();
-  if (Serial.available() > 0) {
-    //Serial.println("After");
-    //Serial.flush();
-    incomingByte = Serial.read();
-    Serial.print(incomingByte);
-    Serial.flush();
-    if (incomingByte == 'C') {
-      isReceived = true;
-      Serial.println("Cutdown command received.");
-      Serial.flush();
-    }
-  }
-  */
-  /*
-  Serial.write('Q'); //Send a query over the serial
-  Serial.flush();
-  */
-  //delay(100); //wait 100 milliseconds for a response
   for (int i = 0; i < 10; i++) 
   {
     if (Serial.available() > 0)
@@ -400,12 +373,10 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
     flashLED(ledFlashTime, 3);
     delay(100);
     deadTime += pollTimeMs/ 1000.0;
-    //Serial.print("deadTime=");Serial.println(deadTime);
     if ( deadTime > windowTimeSecs ) {
       Serial.println( "" );
       Serial.print( "Going back to sleep. Back in " );
       Serial.print( standbySleepTime / 1000 );Serial.println( " sec" );
-      //Serial.flush();
       timeDelay = 0;
       done = true;
    }
@@ -510,7 +481,7 @@ void dumpData() {
 }
 
 void waitForCharge() {
-  float vCutCap = vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;
+  float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;
   while ( vCutCap <= vCharged ) {
     Serial.print("Vcut = ");Serial.print(vCutCap);
     Serial.println("V. Waiting for full charge...");
