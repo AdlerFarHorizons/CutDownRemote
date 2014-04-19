@@ -483,10 +483,12 @@ void dumpData() {
 void waitForCharge() {
   float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;
   while ( vCutCap <= vCharged ) {
+    setPwrDown( false );delay(40);
     Serial.print("Vcut = ");Serial.print(vCutCap);
     Serial.println("V. Waiting for full charge...");
     Serial.flush();
-    delay(1000);
+    setPwrDown( true );
+    delay(10000);
     flashLED( ledFlashTime, 1 );
     vCutCap = vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0; 
   }
