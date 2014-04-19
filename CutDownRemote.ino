@@ -80,7 +80,7 @@ int ledPin = 13;
 int modePin = 9;
 float timeOhFactor = 0.0333; //Empirical with 3 second activeSleepTime
 int maxEepromAddr = 1023; //ATMega328
-String dataValues = "2*(T+75)(C), vB*20(V), vC*20(V)";
+String dataValues = "2*(T+75)(C), vB*20(V), vC*20(V), Cut";
 
 // Variable declarations;
 int cut;
@@ -176,7 +176,6 @@ void loop() // run over and over again
         switchArmed = false;
         Serial.println("Timer is now active.");
         Serial.println("");
-        Serial.println( "Min, T(C), Vbat(V), Vcut(V), Vbck(V)");
         Serial.flush();
         Serial.write('X');
         Serial.print(cutDelayMins);
@@ -187,7 +186,8 @@ void loop() // run over and over again
         Serial.print(",");
         Serial.print(center_lat);
         Serial.print(",");
-        Serial.print(center_lon);
+        Serial.println(center_lon);
+        Serial.println( "Min, T(C), Vbat(V), Vcut(V), Cut");
         Serial.flush();
         eepromAddr = 1;
         EEPROM.write( 0, eepromAddr ); //Initial eeprom address
@@ -204,13 +204,13 @@ void loop() // run over and over again
     // Take action depending on active/armed mode
     if ( active ) {
       sleepTime = activeSleepTime;
-      boolean temp = updateTimer() || cutdownReceived();
-      if ( temp && chgEnable ) {
+      boolean tmp = updateTimer() || cutdownReceived();
+      if ( tmp && chgEnable ) {
         chgEnable = false; // This branch only once
         setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
         delay(100);
       }
-      setCut( temp );
+      setCut( tmp );
       if (sampleNum >= sampleCount) {
         float temp = readTemp( vTempPin, 0 );
         float vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
@@ -220,13 +220,12 @@ void loop() // run over and over again
         Serial.print( temp );Serial.print( ", ");
         Serial.print( vBatt );Serial.print( ", ");
         Serial.print( vCutCap );Serial.print( ", ");
-        Serial.print( vBackupCap );
+        Serial.println( tmp );
         temp = 2.0 * ( temp + 75.0 ); // Shift temperature range
         // Constrain readings to byte values
         if ( temp > 255 ) temp = 255; if ( temp < 0 ) temp = 0;
         vBatt /= 0.05; if ( vBatt > 255 ) vBatt = 255; if ( vBatt < 0  ) vBatt = 0;
         vCutCap /= 0.05;if ( vCutCap > 255 ) vCutCap = 255; if ( vCutCap < 0  ) vCutCap = 0;
-        vBackupCap /= 0.05; if ( vBackupCap > 255 ) vBackupCap = 255; if ( vBackupCap < 0  ) vBackupCap = 0;
         
         // If out of eeprom, keep overwriting the last set of samples
         if ( eepromAddr > maxEepromAddr ) eepromAddr = ( maxEepromAddr - 3 );
@@ -236,7 +235,7 @@ void loop() // run over and over again
         eepromAddr +=1;
         EEPROM.write( eepromAddr, byte( vCutCap ) );
         eepromAddr +=1;
-        EEPROM.write( eepromAddr, byte( vBackupCap ) );
+        EEPROM.write( eepromAddr, byte( tmp ) );
         EEPROM.write( 0, byte(eepromAddr) );
         Serial.println();
         Serial.flush();
