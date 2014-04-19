@@ -139,7 +139,7 @@ void setup()
   sampleNum = 1;
   ledFlashTime = 10; //ms
   switchArmed = false;
-  vCharged = 0.0; //When used for testing purposes set this to 0.0
+  vCharged = 4.1; //When used for testing purposes set this to 0.0
   Serial.begin(9600);
   Serial.flush();
 
@@ -496,7 +496,7 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
 void dumpData() {
   Serial.flush();
   Serial.println( dataValues );
-  int lastAddr = int(EEPROM.read(0));
+  int lastAddr = int(EEPROM.read(0)) * 4;
   int addr = 1;
   while ( addr <= lastAddr ) {
     Serial.print(EEPROM.read(addr));Serial.print(", ");
