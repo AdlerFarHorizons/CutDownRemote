@@ -109,6 +109,7 @@ boolean standby;
 boolean active;
 boolean switchArmed;
 boolean chgEnable;
+boolean isCut;
 int eepromAddr;
 
 void setup()
@@ -121,6 +122,7 @@ void setup()
   chgEnable = true;
   setCutChg( chgEnable );
   setCut( false );
+  isCut = false;
   setLED( false );
   setPwrDown( true );
   sensType = 0; //LM60
@@ -208,6 +210,7 @@ void loop() // run over and over again
       if ( tmp && chgEnable ) {
         chgEnable = false; // This branch only once
         setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
+        isCut = true;
         delay(100);
       }
       setCut( tmp );
@@ -221,6 +224,7 @@ void loop() // run over and over again
         Serial.print( vBatt );Serial.print( ", ");
         Serial.print( vCutCap );Serial.print( ", ");
         Serial.println( tmp );
+        Serial.flush();
         temp = 2.0 * ( temp + 75.0 ); // Shift temperature range
         // Constrain readings to byte values
         if ( temp > 255 ) temp = 255; if ( temp < 0 ) temp = 0;
@@ -235,10 +239,8 @@ void loop() // run over and over again
         eepromAddr +=1;
         EEPROM.write( eepromAddr, byte( vCutCap ) );
         eepromAddr +=1;
-        EEPROM.write( eepromAddr, byte( tmp ) );
+        EEPROM.write( eepromAddr, byte( isCut ) );
         EEPROM.write( 0, byte(eepromAddr) );
-        Serial.println();
-        Serial.flush();
         eepromAddr += 1;
         sampleNum = 0;
       }
