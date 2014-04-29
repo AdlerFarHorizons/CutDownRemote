@@ -81,6 +81,7 @@ int modePin = 9;
 float timeOhFactor = 0.0333; //Empirical with 3 second activeSleepTime
 int maxEepromAddr = 1023; //ATMega328
 String dataValues = "2*(T+75)(C), vB*20(V), vC*20(V), Cut";
+float vBatt;
 
 // Variable declarations;
 int cut;
@@ -149,9 +150,11 @@ void setup()
 
 void loop() // run over and over again
 { 
+  vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;  
   if (!isCharged ) waitForCharge();
   
   setPwrDown(false);
+  //Serial.println(freeRam()); // For testing
   delay(100);
   if (standby) {
     flashLED( ledFlashTime, 3 );
@@ -216,7 +219,7 @@ void loop() // run over and over again
       setCut( tmp );
       if (sampleNum >= sampleCount) {
         float temp = readTemp( vTempPin, 0 );
-        float vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
+        vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
         float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;       
         float vBackupCap = vBackupCapRange * analogRead( vBackupCapPin ) / 1024.0;
         Serial.print( cutTimerMins );Serial.print( ", ");       
@@ -362,6 +365,7 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
     Serial.read();
   }
   Serial.println(""); 
+  Serial.print("Vbat = ");Serial.print(vBatt);Serial.println("V");
   Serial.println("Enter D to dump EEProm data, ");
   Serial.println("any other key to set up the timer...");
   Serial.flush();
@@ -483,8 +487,10 @@ void dumpData() {
 
 void waitForCharge() {
   float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;
+  vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
   while ( vCutCap <= vCharged ) {
     setPwrDown( false );delay(40);
+    Serial.print("Vbat = ");Serial.print(vBatt);Serial.print("V, ");
     Serial.print("Vcut = ");Serial.print(vCutCap);
     Serial.println("V. Waiting for full charge...");
     Serial.flush();
@@ -492,6 +498,7 @@ void waitForCharge() {
     delay(10000);
     flashLED( ledFlashTime, 1 );
     vCutCap = vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0; 
+    vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
   }
   isCharged = true; 
 }
@@ -537,6 +544,13 @@ void promptUserForData(float * data, String dataName, String unit)
         }
       }
     }
+}
+
+int freeRam() 
+{
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
 
   
