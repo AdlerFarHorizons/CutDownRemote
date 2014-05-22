@@ -3,24 +3,7 @@
 #include <Narcoleptic.h>
 
 /*
- * CutDownTimer
- *
- * V5.00 Adds support for the BaseModule's GPS functions. It will ask
- * the user about the maximum altitude of the flight and supply this to
- * the BaseModule.
- *
- * V3.11 Now No longer Sends the Query 'Q'
- *
- * V3.01 Now avoids character conflict with base module, to allow
- *       the use of a third Xbee to program both the base module and 
- *       Cutdown arduino
- *
- * V3.00 Some fixes for high XBee current and workarounds for
- *       lack of single point setup control in alpha base station.
- * - Put XBee to sleep when not needed. Required hardware change.
- * - Use variable LED flash count to signal ready for input from base
- *   allows setup without terminal connection.
- * - Programming mode until cutter cap is nearly charged.
+ * CutDownRemote
  *
  * Lou Nigra
  * Adler Planetarium - Far Horizons
@@ -31,11 +14,10 @@
  * Controls:
  *  Raw voltage tied to charger ON switch
  *  Programming mode when serial port is connected
- *  Timer activate/de-activate momentary contact switch
+ *  Timer activate/de-activate momentary contact switch (no longer used)
  *
  * Indicators:
  *  LED no blink: Charging => Programming mode inhibited.
- *  LED slow blink: Armed => valid countdown value, ready to start. 
  *  LED fast blink: Active => Timer is counting down.
  *  LED long Off: Standby => Waiting for programming window to open.
  *  LED single three flashes: Programming mode => Window open for "non-D"
@@ -44,25 +26,19 @@
  *  The following sequence follows if a non-D character is entered while
  *  the window is open:
  *
- *  LED single six flashes: Timer value: => Ready for timer value entry.
+ *  LED single six flashes: Parameter prompt: => Ready for parameter entry.
  *  LED three flashes: Confirmation: => Ready for y or n
- *  LED slow blink: Armed (as above)
  *
  * State Machine:
- *  RESET
- *    -> TTY
- *  TTY
- *    timeout -> SLEEP
- *    valid value -> armed -> SLEEP
- *    non-valid value -> standby -> SLEEP
+ *  standby -> WAITFORCHARGE
+ *  WAITFORCHARGE
+ *    -> GETTTY
+ *  GETTTY
+ *    (timeout) -> SLEEP
+ *    (entries) -> active -> SLEEP
  *  SLEEP
- *    wakeUp!
  *      standby? => TTY
- *      active? 
- *        switch? -> armed => SLEEP
- *        !switch? -> timerUpdate
- *      armed?
- *        switch? -> active    
+ *      active?  -> timerUpdate
  */
 // General constants 
 float vRef = 3.3;
@@ -89,7 +65,6 @@ int cutDelayMins;
 int ttyPollTime;
 int ttyWindowTimeSecs;
 int standbySleepTime;
-int armedSleepTime;
 int activeSleepTime;
 int sleepTime;
 int sampleCount;
@@ -108,7 +83,6 @@ int dataSampleInterval;
 int sensType;
 boolean standby;
 boolean active;
-boolean switchArmed;
 boolean chgEnable;
 boolean isCut;
 int eepromAddr;
@@ -127,22 +101,22 @@ void setup()
   setLED( false );
   setPwrDown( true );
   sensType = 0; //LM60
-  active = false;
-  standby = true;
-  cutDelayMins = 0;
-  cutTimerMins = 0;
   ttyPollTime = 6000; //ms
   ttyWindowTimeSecs = 10; //secs
   standbySleepTime = 30000; //ms
-  armedSleepTime = 12000; //ms
   activeSleepTime = 3000; //ms
   sampleTime = 60; //ms
   float temp = ( 1000.0 * sampleTime ) / ( 1.0 * activeSleepTime );
   sampleCount = (int)( 0.5 + temp);
-  sampleNum = 1;
   ledFlashTime = 10; //ms
-  switchArmed = false;
   vCharged = 4.1; //When used for testing purposes set this to 0.0
+
+  active = false;
+  standby = true;
+  sleepTime = standbySleepTime;
+  cutDelayMins = 0;
+  cutTimerMins = 0;
+  sampleNum = 1;
   Serial.begin(9600);
   Serial.flush();
 
@@ -158,100 +132,72 @@ void loop() // run over and over again
   delay(100);
   if (standby) {
     flashLED( ledFlashTime, 3 );
-    switchArmed = false;
     cutDelayMins = getTTY( ttyPollTime, ttyWindowTimeSecs );
-    if (cutDelayMins <= 0) {
-      // standby mode
-      standby = true;
-      sleepTime = standbySleepTime;
-    } else {
-      // armed mode
+    if ( cutDelayMins > 0 ) {
       standby = false;
-      active = false;
-      sleepTime = armedSleepTime;
+      active = true;
+      sleepTime = activeSleepTime;
+      Serial.println("Timer is now active.");
+      Serial.println("");
+      Serial.flush();
+      Serial.write('X');
+      Serial.print(cutDelayMins);
+      Serial.print(",");
+      Serial.print(maxAlt);
+      Serial.print(",");
+      Serial.print(maxRadius);
+      Serial.print(",");
+      Serial.print(center_lat);
+      Serial.print(",");
+      Serial.println(center_lon);
+      Serial.println( "Min, T(C), Vbat(V), Vcut(V), Cut");
+      Serial.flush();
+      eepromAddr = 1;
+      EEPROM.write( 0, eepromAddr ); //Initial eeprom address
     }
   } else {
     flashLED( ledFlashTime, 1 );
-    // Check for mode change via switch
-    if ( getModeSwitch() ) {
-      Serial.println("mode switch press detected");
+    
+    sleepTime = activeSleepTime;
+    boolean tmp = updateTimer() || cutdownReceived();
+    if ( tmp && chgEnable ) {
+      chgEnable = false; // This branch only once
+      setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
+      isCut = true;
+      delay(100);
+    }
+    setCut( tmp );
+    if (sampleNum >= sampleCount) {
+      float temp = readTemp( vTempPin, 0 );
+      vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
+      float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;       
+      float vBackupCap = vBackupCapRange * analogRead( vBackupCapPin ) / 1024.0;
+      Serial.print( cutTimerMins );Serial.print( ", ");       
+      Serial.print( temp );Serial.print( ", ");
+      Serial.print( vBatt );Serial.print( ", ");
+      Serial.print( vCutCap );Serial.print( ", ");
+      Serial.println( tmp );
       Serial.flush();
-      if (switchArmed) {
-        active = true;
-        switchArmed = false;
-        Serial.println("Timer is now active.");
-        Serial.println("");
-        Serial.flush();
-        Serial.write('X');
-        Serial.print(cutDelayMins);
-        Serial.print(",");
-        Serial.print(maxAlt);
-        Serial.print(",");
-        Serial.print(maxRadius);
-        Serial.print(",");
-        Serial.print(center_lat);
-        Serial.print(",");
-        Serial.println(center_lon);
-        Serial.println( "Min, T(C), Vbat(V), Vcut(V), Cut");
-        Serial.flush();
-        eepromAddr = 1;
-        EEPROM.write( 0, eepromAddr ); //Initial eeprom address
-
-      } else {
-        switchArmed = true;
-        Serial.println( "Armed: Keep holding for one more flash to activate." );
-        Serial.flush();
-      }
-    } else {
-      switchArmed = false;
+      temp = 2.0 * ( temp + 75.0 ); // Shift temperature range
+      // Constrain readings to byte values
+      if ( temp > 255 ) temp = 255; if ( temp < 0 ) temp = 0;
+      vBatt /= 0.05; if ( vBatt > 255 ) vBatt = 255; if ( vBatt < 0  ) vBatt = 0;
+      vCutCap /= 0.05;if ( vCutCap > 255 ) vCutCap = 255; if ( vCutCap < 0  ) vCutCap = 0;
+      
+      // If out of eeprom, keep overwriting the last set of samples
+      if ( eepromAddr > maxEepromAddr ) eepromAddr = ( maxEepromAddr - 3 );
+      EEPROM.write( eepromAddr, byte( temp ) );
+      eepromAddr +=1;
+      EEPROM.write( eepromAddr, byte( vBatt ) );
+      eepromAddr +=1;
+      EEPROM.write( eepromAddr, byte( vCutCap ) );
+      eepromAddr +=1;
+      EEPROM.write( eepromAddr, byte( isCut ) );
+      EEPROM.write( 0, byte(eepromAddr) );
+      eepromAddr += 1;
+      sampleNum = 0;
     }
-
-    // Take action depending on active/armed mode
-    if ( active ) {
-      sleepTime = activeSleepTime;
-      boolean tmp = updateTimer() || cutdownReceived();
-      if ( tmp && chgEnable ) {
-        chgEnable = false; // This branch only once
-        setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
-        isCut = true;
-        delay(100);
-      }
-      setCut( tmp );
-      if (sampleNum >= sampleCount) {
-        float temp = readTemp( vTempPin, 0 );
-        vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
-        float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;       
-        float vBackupCap = vBackupCapRange * analogRead( vBackupCapPin ) / 1024.0;
-        Serial.print( cutTimerMins );Serial.print( ", ");       
-        Serial.print( temp );Serial.print( ", ");
-        Serial.print( vBatt );Serial.print( ", ");
-        Serial.print( vCutCap );Serial.print( ", ");
-        Serial.println( tmp );
-        Serial.flush();
-        temp = 2.0 * ( temp + 75.0 ); // Shift temperature range
-        // Constrain readings to byte values
-        if ( temp > 255 ) temp = 255; if ( temp < 0 ) temp = 0;
-        vBatt /= 0.05; if ( vBatt > 255 ) vBatt = 255; if ( vBatt < 0  ) vBatt = 0;
-        vCutCap /= 0.05;if ( vCutCap > 255 ) vCutCap = 255; if ( vCutCap < 0  ) vCutCap = 0;
-        
-        // If out of eeprom, keep overwriting the last set of samples
-        if ( eepromAddr > maxEepromAddr ) eepromAddr = ( maxEepromAddr - 3 );
-        EEPROM.write( eepromAddr, byte( temp ) );
-        eepromAddr +=1;
-        EEPROM.write( eepromAddr, byte( vBatt ) );
-        eepromAddr +=1;
-        EEPROM.write( eepromAddr, byte( vCutCap ) );
-        eepromAddr +=1;
-        EEPROM.write( eepromAddr, byte( isCut ) );
-        EEPROM.write( 0, byte(eepromAddr) );
-        eepromAddr += 1;
-        sampleNum = 0;
-      }
-      sampleNum += 1;
-    } else {
-      cutTimerMins = 0;
-      sleepTime = armedSleepTime;
-    }
+    sampleNum += 1;
   }
   Serial.flush();
   setPwrDown( true );
@@ -397,9 +343,7 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
       Serial.read();
     }
     Serial.println("");
-    Serial.println("Ready for timer setting.");
-    Serial.println("The timer won't start until MODE button" );
-    Serial.println("pressed and held for two LED flashes.");
+    Serial.println("Ready for parameter settings.");
     Serial.println("");
     
     promptUserForData(&maxAlt, "max altitude", "feet");
@@ -410,61 +354,15 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
     
     promptUserForData(&center_lon, "launch longitude", "degrees");
      
-    Serial.print("Enter timer duration in minutes: ");
-    done = false;
-    rcvdBytesCnt = 0;
-    boolean typing = true;
+    float timer;    
+    Serial.println( "NOTE: Timer entry is next.");
+    Serial.println( "Once timer is confirmed cutdown system will be activated.");
+    Serial.println("");
+    promptUserForData(&timer, "timer duration", "minutes");
+    timeDelay = int( timer + 0.5);
     flashLED( ledFlashTime, 6 );
-    while ( typing ) {
-      while ( ( inputByte = Serial.read() ) < 0 ) {
-        //Serial.println(".");
-        delay(100);
-      }
-      if ( inputByte <= 57 && inputByte >= 48) {
-        if ( rcvdBytesCnt < 8 ) {
-          rcvdBytes[rcvdBytesCnt] = inputByte;
-          Serial.write( inputByte );
-          rcvdBytesCnt += 1;
-        }
-      } else {
-        if ( inputByte == 13 ) {
-          typing = false;
-          Serial.println("");
-          timeDelay = 0;
-          int weight = 1;
-          for ( int i = 0; i < rcvdBytesCnt; i++ ) {
-            timeDelay += ( rcvdBytes[rcvdBytesCnt-i-1] - 48 ) * weight;
-            weight *= 10;
-          }
-          int hrs = (int)( timeDelay / 60.0 );
-          int mins = timeDelay - 60 * hrs;
-          Serial.print("You've entered ");
-          Serial.print(timeDelay);
-          Serial.print(" minutes, or ");
-          Serial.print( hrs ); Serial.print( " hrs, " ); Serial.print( mins );
-          Serial.println( " min." );
-          int response = 0;
-          Serial.print("Are you sure (y/n)? " );
-          Serial.flush();
-          flashLED( ledFlashTime, 3 );
-          while ( response != 110 && response != 121 ) {
-            response = Serial.read();
-            //Serial.print(response);
-          }
-          Serial.write( response );Serial.println("");Serial.flush();
-          if ( response == 121 ) {
-            Serial.println( "" );
-            Serial.println( "Timer now armed. Press and hold MODE button");
-            Serial.print( "for two LED flashes (up to ");
-            int time = (int)( 0.5 + 2.0 * armedSleepTime / 1000.0 );
-            Serial.print( time );Serial.println( " secs) to start it.");
-            Serial.flush();
-            flashLED( ledFlashTime, 2 );
-            done = true; 
-          }
-        }
-      }
-    }
+    Serial.flush();
+    done = true; 
   }
   return(timeDelay);  
 }
@@ -514,7 +412,7 @@ void promptUserForData(float * data, String dataName, String unit)
         *data = Serial.parseFloat();
         Serial.println(*data); Serial.flush();
         if (*data != 0) {
-          Serial.print("You've entered "); Serial.print(*data); Serial.println(" " + unit + " as the " + dataName + " for this flight."); Serial.print("Is this correct? (y/n) ");
+          Serial.print(*data); Serial.println(" " + unit + " entered as the " + dataName + " ."); Serial.print("Is this correct? (y/n) ");
           Serial.flush();
           flashLED( ledFlashTime, 3 );
           int response = 0;
