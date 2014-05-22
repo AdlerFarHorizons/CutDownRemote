@@ -29,33 +29,31 @@ Illinois Mathematics and Science Academy - SIR Program
 
 <h4>Controls</h4>
 
- Raw voltage tied to charger ON switch
- Programming mode when serial port is connected via 3.3V FTDI and XBee removed
- Timer activate/de-activate momentary contact switch (no longer used)
+- Raw voltage tied to charger ON switch
+- Programming mode when serial port is connected via 3.3V FTDI and XBee removed
+- Timer activate/de-activate momentary contact switch (no longer used)
 
 <h4>Indicators</h4>
 
- LED no blink: Charging => Programming mode inhibited.
- LED fast blink: Active => Timer is counting down.
- LED long Off: Standby => Waiting for programming window to open.
- LED single three flashes: Programming mode => Window open for "non-D"
-                           input to enter programming mode.
+- LED no blink: Charging => Programming mode inhibited.
+- LED fast blink: Active => Timer is counting down.
+- LED long Off: Standby => Waiting for programming window to open.
+- LED single three flashes: Programming mode => Window open for "non-D"
+                            input to enter programming mode.
 
- The following sequence follows if a non-D character is entered while
- the window is open:
+The following sequence follows if a non-D character is entered while
+the window is open:
 
- LED single six flashes: Parameter prompt: => Ready for parameter entry.
- LED three flashes: Confirmation: => Ready for y or n
+- LED single six flashes: Parameter prompt: => Ready for parameter entry.
+- LED three flashes: Confirmation: => Ready for y or n
 
 <h4>State Machine</h4>
-
- standby -> WAITFORCHARGE
- WAITFORCHARGE
-   -> GETTTY
- GETTTY
-   (timeout) -> SLEEP
-   (entries) -> active -> SLEEP
- SLEEP
-   standby? => TTY
-   active?  -> timerUpdate
-
+- standby -> WAITFORCHARGE
+- WAITFORCHARGE
+-   -> GETTTY
+- GETTTY
+-   (timeout) -> SLEEP
+-   (entries) -> active -> SLEEP
+- SLEEP
+-   standby? > TTY
+-   active?  -> timerUpdate
