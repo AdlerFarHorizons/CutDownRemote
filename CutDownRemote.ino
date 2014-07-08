@@ -54,7 +54,7 @@ int vBackupCapPin = 2;
 float vBackupCapRange = vRef * 2.0;
 int ledPin = 13;
 int modePin = 9;
-float timeOhFactor = 0.0333; //Empirical with 3 second activeSleepTime
+float timeOhFactor = 0.1213; //0.0333; //Empirical with 3 second activeSleepTime
 int maxEepromAddr = 1023; //ATMega328
 String dataValues = "2*(T+75)(C), vB*20(V), vC*20(V), Cut";
 float vBatt;
