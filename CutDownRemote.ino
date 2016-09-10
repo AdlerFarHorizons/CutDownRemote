@@ -1,5 +1,5 @@
 #include <EEPROM.h>
-
+#include <MsTimer2.h>
 #include <Narcoleptic.h>
 
 /*
@@ -43,21 +43,25 @@
 // General constants 
 float vRef = 3.3;
 int cutPin = 10;
-int vTempPin = 5;
-int vBattPin = 4;
+int vTempPin = A3;
+int vBattPin = A2;
 int pwrDnPin = 7;
-int cutChgDisablePin = 8;
-float vBattRange = vRef * 4.092;
-int vCutCapPin = 3;
-float vCutCapRange = vRef * 2.0;
+//int cutChgDisablePin = 8;
+float vBattRange = 0.96 * vRef * ( 39 + 82 ) / 39; // Empirical correction factor included
+int vCutCapPin = A0;
+float vCutCapRange = 0.94 * vRef * ( 100 + 56 ) / 56; // Empirical correction factor included
 int vBackupCapPin = 2;
-float vBackupCapRange = vRef * 2.0;
+//float vBackupCapRange = vRef * 2.0;
+int chargePin = 8;
 int ledPin = 13;
-int modePin = 9;
-float timeOhFactor = 0.1213; //0.0333; //Empirical with 3 second activeSleepTime
+//int modePin = 9;
+float timeOhFactor = 0.198; //0.0333; //Empirical with 3 second activeSleepTime
 int maxEepromAddr = 1023; //ATMega328
 String dataValues = "2*(T+75)(C), vB*20(V), vC*20(V), Cut";
-float vBatt;
+float vBatt, vCutCap;
+float vCutLow = 4.3;
+float vCutHigh = 4.4;
+
 
 // Variable declarations;
 int cut;
@@ -91,11 +95,12 @@ void setup()
 {
   pinMode(cutPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
-  pinMode(modePin, INPUT_PULLUP );
+  //pinMode(modePin, INPUT_PULLUP );
   pinMode(pwrDnPin, OUTPUT);
-  pinMode(cutChgDisablePin, OUTPUT);
+  //pinMode(cutChgDisablePin, OUTPUT);
+  pinMode( chargePin, OUTPUT );
   chgEnable = true;
-  setCutChg( chgEnable );
+  //setCutChg( chgEnable );
   setCut( false );
   isCut = false;
   setLED( false );
@@ -119,14 +124,14 @@ void setup()
   sampleNum = 1;
   Serial.begin(9600);
   Serial.flush();
-
+  capChargeControl();
 }
 
 void loop() // run over and over again
 { 
   vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;  
   if (!isCharged ) waitForCharge();
-  
+
   setPwrDown(false);
   //Serial.println(freeRam()); // For testing
   delay(100);
@@ -162,7 +167,8 @@ void loop() // run over and over again
     boolean tmp = updateTimer() || cutdownReceived();
     if ( tmp && chgEnable ) {
       chgEnable = false; // This branch only once
-      setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
+      digitalWrite( chargePin, LOW );
+      //setCutChg( chgEnable ); // Disable cut cap charging if cut is imminent.
       isCut = true;
       delay(100);
     }
@@ -171,7 +177,7 @@ void loop() // run over and over again
       float temp = readTemp( vTempPin, 0 );
       vBatt = vBattRange * analogRead( vBattPin ) / 1024.0;       
       float vCutCap = vCutCapRange * analogRead( vCutCapPin ) / 1024.0;       
-      float vBackupCap = vBackupCapRange * analogRead( vBackupCapPin ) / 1024.0;
+      //float vBackupCap = vBackupCapRange * analogRead( vBackupCapPin ) / 1024.0;
       Serial.print( cutTimerMins );Serial.print( ", ");       
       Serial.print( temp );Serial.print( ", ");
       Serial.print( vBatt );Serial.print( ", ");
@@ -199,9 +205,25 @@ void loop() // run over and over again
     }
     sampleNum += 1;
   }
+  capChargeControl();
   Serial.flush();
   setPwrDown( true );
   Narcoleptic.delay( sleepTime );
+  capChargeControl();
+}
+
+void capChargeControl() {
+  if ( chgEnable ) {
+    float vTemp = vCutCapRange * analogRead( vCutCapPin ) / 1024;
+    if ( vTemp > vCutHigh ) {
+      digitalWrite( chargePin,LOW );
+    }
+    if ( vTemp < vCutLow ) {
+      digitalWrite( chargePin, HIGH );
+    }
+  } else {
+    digitalWrite( chargePin, LOW );
+  }
 }
 
 void setPwrDown( boolean state ) {
@@ -213,7 +235,7 @@ void setCut( boolean state ) {
 }
 
 void setCutChg( boolean state ) {
-  digitalWrite( cutChgDisablePin, !state );
+  //digitalWrite( cutChgDisablePin, !state );
 }
 
 boolean updateTimer() {
@@ -271,10 +293,10 @@ boolean isStandby() {
   return( standby );
 }
 
-boolean getModeSwitch() {
-  // Mode switch is active low
-  return( digitalRead( modePin ) == LOW );
-}
+//boolean getModeSwitch() {
+//  // Mode switch is active low
+//  return( digitalRead( modePin ) == LOW );
+//}
 
 float readTemp( int pin, int sensType ) {
   // Temperature Sensor constants:
