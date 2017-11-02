@@ -77,8 +77,6 @@ int sampleTime;
 float cutTimerMins;
 float maxAlt;
 float maxRadius;
-float center_lat;
-float center_lon;
 float vCharged;
 boolean isCharged;
 boolean ledState;
@@ -144,18 +142,16 @@ void loop() // run over and over again
       sleepTime = activeSleepTime;
       Serial.println("Timer is now active.");
       Serial.println("");
+      Serial.println("Sending position-based settings to base unit.");
+      Serial.println("(Launch location will be set to next GPS fix):\n");
       Serial.flush();
       Serial.write('X');
       Serial.print(cutDelayMins);
       Serial.print(",");
       Serial.print(maxAlt);
       Serial.print(",");
-      Serial.print(maxRadius);
-      Serial.print(",");
-      Serial.print(center_lat);
-      Serial.print(",");
-      Serial.println(center_lon);
-      Serial.println( "Min, T(C), Vbat(V), Vcut(V), Cut");
+      Serial.println(maxRadius);
+      Serial.println( "\nMin, T(C), Vbat(V), Vcut(V), Cut");
       Serial.flush();
       eepromAddr = 1;
       EEPROM.write( 0, eepromAddr ); //Initial eeprom address
@@ -371,10 +367,6 @@ int getTTY( int pollTimeMs, int windowTimeSecs ) {
     promptUserForData(&maxAlt, "max altitude", "feet");
     
     promptUserForData(&maxRadius, "max radius", "miles");
-    
-    promptUserForData(&center_lat, "launch latitude", "degrees");
-    
-    promptUserForData(&center_lon, "launch longitude", "degrees");
      
     float timer;    
     Serial.println( "NOTE: Timer entry is next.");
